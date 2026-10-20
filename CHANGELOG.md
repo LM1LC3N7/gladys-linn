@@ -24,5 +24,18 @@ the notes of the version's GitHub Release.
   intervals, with an automatic search for its new address.
 - "Check the players" and "List the sources and pins" buttons.
 - Bounded answers and a linear XML parser that refuses any `DOCTYPE`.
+- Every request is one job of the device queue, bounded by the deadline of
+  its command: Standby cancels the read in flight and never waits for a slow
+  player, and Power on is acked within the 5 s Gladys waits.
+- Play, next and previous on a player in standby check the volume cap after
+  the wake-up, like Power on, a source and a pin.
+- Mute: a scene sending 0 unmutes (cap first); a press of the button toggles.
+- A pin is invoked only if its slot still holds the same pin on the player.
+- The volume is scaled when the player's maximum (`VolumeMax`) is not 100.
+- An HTTP error after the request reached the player says "sent, without
+  confirmation", never "not sent"; only an HTTP 200 is a success.
+- The entity decoding stays linear on a long run of `&`.
+- Devices neither created nor seen by the last search are forgotten.
+- "Check the players" answers within 25 s.
 
 [Unreleased]: https://github.com/LM1LC3N7/gladys-linn/commits/main

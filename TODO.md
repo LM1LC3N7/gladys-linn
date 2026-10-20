@@ -24,6 +24,14 @@ up to date at the end of every milestone.
       backoff and automatic search; "Check the players" and "List the sources
       and pins". Tested against a fake device on loopback HTTP and the Linn
       description of openhomedevice. No real device.
+- [x] **Milestone 1 fixes — review 1** (2026-10-21): one queue job per
+      request, bounded by the deadline of its command (Power on acked in
+      time, its cap check in steps); every command cancels the read in
+      flight (Standby never waits for a slow player); Play / Next / Previous
+      in standby check the cap; HTTP errors after the request = "sent,
+      without confirmation", only a 200 is a success; linear entity
+      decoding; mute 0 = unmute; pin slot read again; VolumeMax scaling;
+      unused records forgotten; "Check" bounded to 25 s.
 - [ ] **Milestone 2 — real players**: a tester's Linn (see below), captures
       of the SOAP answers turned into fixtures (anonymized).
 - [ ] **Milestone 3 — more**: Songcast groups (Receiver / Sender), Radio
@@ -38,8 +46,12 @@ up to date at the end of every milestone.
 - Does a Linn answer the core's M-SEARCH for `upnp:rootdevice`? (UDA says
   every root device must.) Is the LOCATION on the address that answered?
 - `SetStandby` with `1` / `0` (UPnP boolean), `SetMute` the same.
-- `Volume` range on a Linn (0-100 in Kazoo; `Characteristics` gives
-  `VolumeMax`): a device whose maximum is not 100 would need a scale.
+- `Volume.Characteristics` on a Linn: `VolumeMax` 100 expected (the volume
+  is scaled otherwise; a device without the action is taken as 0-100).
+- Does Play / Next on a Linn in standby wake it (ohMediaPlayer activates the
+  source)? The cap is checked after either way.
+- What the dashboard sends for a `television/volume-mute` press (1 assumed,
+  as `PushDeviceFeature`).
 - `Info.Counters` changes with each track and each radio text?
 - `Pins.ReadList` with only the non-zero ids, as sent here (openhomedevice
   sends the whole IdArray, zeros included).
@@ -52,10 +64,12 @@ up to date at the end of every milestone.
   manifest and the `docker_image` tag (the first patch release gives 0.1.1).
 - **Not a duplicate** (lot 11 proposal, line 14, checked 2026-10-20): no Linn
   or OpenHome integration in the core, the store, the forum thread or GitHub.
-  `guim31/gladys-dlna` overlaps partly (generic UPnP AV, which a Linn also
-  exposes): this integration only drives the OpenHome services DLNA has not
-  got (sources, pins, standby) plus the OpenHome volume and transport, and
-  says so in the docs, the manifest and the README.
+  `guim31/gladys-dlna` overlaps functionally when a Linn also exposes UPnP AV
+  (volume, playback), never in code or protocol: this integration drives the
+  OpenHome services only (Product and Pins, which DLNA has not got, plus the
+  OpenHome Volume, Transport and Info), never AVTransport or RenderingControl.
+  The docs, the manifest and the README say so, and that the cap does not
+  apply to a player also driven by the DLNA integration.
 - **Own client on `node:http`, no UPnP library**: openhomedevice (MIT,
   maintained, used by Home Assistant) is Python on async_upnp_client; its
   logic is ported (credited in THIRD_PARTY_NOTICES.md). The only runtime
@@ -68,16 +82,25 @@ up to date at the end of every milestone.
   call back (the DLNA integration made the same choice).
 - **Features like the Cambridge Audio integration**: power read only
   (`unknown/binary`), Power on / Standby buttons, no switch an "everything
-  off" could reach; mute as `television/volume-mute` (a press: read, then
-  set the opposite); the source and the pins in one `text/select`
+  off" could reach; mute as `television/volume-mute` (a press, which the
+  dashboard sends as 1: read, then set the opposite; 0 = unmute, so a scene
+  can unmute without knowing the state; the cap first); the source and the pins in one `text/select`
   (`source:<index>`, `pin:<slot>`; keys forever).
 - **Volume cap** 50 by default (1-100), read just before each send; unmuting
-  lowers to the cap first; Power on, or a source / pin chosen in standby,
-  checks the volume after the wake-up (within the command, then every 2.5 s,
-  6 times).
+  lowers to the cap first; Power on, or a source / pin / Play / Next /
+  Previous in standby, checks the volume after the wake-up (within the
+  command budget, then every 2.5 s, 6 times; a Standby stops it). The cap is
+  in percent, scaled to `VolumeMax`.
 - **Commands**: a 3.5 s budget, a request not started under 300 ms left;
-  "not sent" / "sent, without confirmation" / the SOAP fault quoted. Standby
-  is never blocked by the backoff of an unreachable device: tried once.
+  "not sent" / "sent, without confirmation" (any HTTP answer, even an
+  error, means the request arrived) / the SOAP fault quoted. One queue job
+  per request; every command cancels the read in flight (the queue moves on
+  even if the request ignores its signal), a write is never cancelled.
+  Standby is never blocked by the backoff of an unreachable device: tried
+  once. A pin is invoked only if `GetIdArray` read again shows the same id
+  in its slot.
+- **Records**: a device neither created nor seen by the last search is
+  forgotten (a host announcing many UDNs never fills the table for good).
 - **XML**: a `DOCTYPE` is refused (UPnP never sends one), only the five XML
   entities and numeric references are decoded, depth / size / nodes bounded.
 - **No /data**: no secret, no state worth keeping (the created devices hold

@@ -38,18 +38,21 @@ export function buildEnvelope(serviceType, action, args = {}) {
 
 /**
  * The out arguments of an action response: a prototype-free `{ name: text }`.
- * Throws an OpenhomeError on a SOAP fault or an unusable answer.
+ * Throws an OpenhomeError on a SOAP fault or an unusable answer. An answer
+ * arrived, so every error but the fault (a refusal) says the device may have
+ * acted (`maybeSent`): a command is then "sent, without confirmation".
  */
 export function parseResponse(action, xml, status) {
+  const unusable = (code, detail) =>
+    new OpenhomeError(code, `${action}: ${detail}`, { status, maybeSent: true });
   let envelope;
   try {
     envelope = parseXml(xml, { maxLength: LIMITS.soapBytes });
   } catch (err) {
-    throw new OpenhomeError(
-      'answer',
-      `${action}: ${err instanceof XmlError ? err.message : 'invalid SOAP answer'}`,
-      { status },
-    );
+    if (status !== 200) {
+      throw unusable('status', `HTTP ${status}`);
+    }
+    throw unusable('answer', err instanceof XmlError ? err.message : 'invalid SOAP answer');
   }
   const body = childOf(envelope, 'Body') ?? find(envelope, 'Body');
   const fault = find(body, 'Fault');
@@ -66,15 +69,15 @@ export function parseResponse(action, xml, status) {
       upnpCode: code,
     });
   }
+  // Only a 200 is a success, whatever the body says.
+  if (status !== 200) {
+    throw unusable('status', `HTTP ${status}`);
+  }
   const response = (body?.children ?? []).find(
     (node) => typeof node === 'object' && node.name === `${action}Response`,
   );
   if (!response) {
-    throw new OpenhomeError(
-      status >= 400 ? 'status' : 'answer',
-      `${action}: ${status >= 400 ? `HTTP ${status}` : 'no response element'}`,
-      { status },
-    );
+    throw unusable('answer', 'no response element');
   }
   const out = Object.create(null);
   for (const node of response.children) {

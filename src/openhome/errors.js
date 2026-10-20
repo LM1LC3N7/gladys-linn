@@ -9,6 +9,9 @@
 //   fault     a SOAP fault (`upnpCode`, the message is its description)
 //   answer    the XML is not what the request expects
 //   refused   the integration refused to send (bad URL, other host)
+//   deadline  not started: too little time left for what it belongs to
+// Every error raised after an HTTP answer arrived (status, answer, too_large,
+// redirect) has `maybeSent`: the device received the request.
 // `unreachable` tells the failures that make a device "offline"; `maybeSent`
 // says the request may have reached the device (a timeout after the request
 // was written): a command is then "sent, without confirmation".

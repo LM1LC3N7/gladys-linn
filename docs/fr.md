@@ -17,19 +17,23 @@ L'intégration [DLNA de guim31](https://github.com/guim31/gladys-dlna)
 `AVTransport` et `RenderingControl`) : lire une URL ou un serveur multimédia,
 volume, lecture. Elle fonctionne aussi avec un Linn.
 
-Celle-ci fait autre chose : elle ne parle qu'aux **services OpenHome**
-(`urn:av-openhome-org`), que le DLNA n'a pas :
+Celle-ci passe par un autre chemin : elle ne parle qu'aux **services OpenHome**
+(`urn:av-openhome-org`), jamais à `AVTransport` ni à `RenderingControl`. Elle
+apporte ce que le DLNA n'a pas :
 
 - les **sources** de l'appareil (Playlist, Radio, Songcast, entrées HDMI,
   analogiques, numériques…), à choisir dans une liste ;
 - les **épingles** (« pins ») réglées dans l'application Linn : une radio, une
   liste de lecture, une entrée, rappelées d'un clic ;
 - la **veille** (allumer, mettre en veille, état de marche) ;
-- le volume **plafonné** et la sourdine du service Volume d'OpenHome.
+  Elle pilote aussi le volume (**plafonné**), la sourdine, la lecture et le titre,
+  par les services Volume, Transport et Info d'OpenHome.
 
 Elle ne lit pas d'URL, ne parcourt pas de serveur multimédia et ne joue pas les
 notifications : pour cela, gardez l'intégration DLNA. Les deux peuvent tourner
-ensemble ; un même lecteur peut alors être créé dans chacune.
+ensemble ; un même lecteur peut alors être créé dans chacune. Attention : le
+plafond de volume de cette intégration ne s'applique pas à ce que l'intégration
+DLNA envoie au même lecteur.
 
 ## Installation
 
@@ -52,7 +56,7 @@ UPnP sur votre ordinateur l'affiche.
 | Allumer            | bouton                         | sort le lecteur de la veille                                |
 | Veille             | bouton                         | met le lecteur en veille                                    |
 | Volume             | musique / volume (0 à 100)     | plafonné ; absent si le volume du lecteur est fixe          |
-| Sourdine           | bouton (télévision / sourdine) | chaque appui lit l'état puis règle l'inverse                |
+| Sourdine           | bouton (télévision / sourdine) | un appui lit l'état puis règle l'inverse ; 0 la retire      |
 | Lecture, pause     | boutons musique                |                                                             |
 | Suivant, précédent | boutons musique                | pas sur une radio                                           |
 | Lecture en cours   | état musique (lecture seule)   | 1 en lecture, 0 sinon                                       |
@@ -73,10 +77,14 @@ Gladys le rendrait audible :
 
 - **Retirer la sourdine** : si le volume dépasse le plafond, il est d'abord
   ramené au plafond, puis la sourdine est retirée.
-- **Allumer**, ou choisir une source ou une épingle quand le lecteur est en
-  veille : après le réveil, le volume est relu et ramené au plafond s'il le
+- **Allumer**, ou choisir une source, une épingle, Lecture, Suivant ou
+  Précédent quand le lecteur est en veille (un Linn sort alors de veille) : après le réveil, le volume est relu et ramené au plafond s'il le
   dépasse. Si le lecteur met du temps à se réveiller, l'intégration revérifie
-  toutes les 2,5 s pendant 15 s environ.
+  toutes les 2,5 s pendant 15 s environ, sauf si Veille est appuyé entre-temps.
+
+Le plafond est un pourcentage : si le lecteur annonce un volume maximal autre
+que 100 (`Volume.Characteristics`), le volume et le plafond sont mis à
+l'échelle de ses pas.
 
 ## Lecture de l'état
 
@@ -96,17 +104,28 @@ plus, pour suivre une nouvelle adresse (le lecteur est reconnu par son UDN).
 ## Commandes
 
 Chaque commande reçoit une réponse en moins de 4 secondes (Gladys attend 5
-secondes). Une commande qui n'a pas pu partir est signalée « not sent » (rien
-envoyé) ; une commande partie sans réponse du lecteur est signalée « sent,
-without confirmation » (envoyée, sans confirmation) ; un refus du lecteur
-(erreur SOAP) est cité tel quel. Veille et sourdine passent avant les autres
-commandes en attente. La source choisie est vérifiée sur la liste relue du
-lecteur avant l'envoi ; une épingle doit exister sur le lecteur.
+secondes) : chaque requête est bornée par ce qui reste de ce délai, et la
+vérification du plafond après un réveil continue en arrière-plan si besoin.
+Une commande qui n'a pas pu partir est signalée « not sent » (rien envoyé) ;
+une commande partie dont la réponse manque ou est inutilisable (délai, erreur
+HTTP) est signalée « sent, without confirmation » (envoyée, sans
+confirmation) ; un refus du lecteur (erreur SOAP) est cité tel quel.
+
+Une commande annule la lecture d'état en cours et passe avant elle ; Veille et
+sourdine passent aussi avant les autres commandes en attente : **Veille n'attend
+jamais un lecteur lent**. La source choisie est vérifiée sur la liste relue du
+lecteur avant l'envoi ; pour une épingle, l'emplacement est relu et doit
+toujours contenir la même épingle (sinon rien n'est envoyé).
+
+Sourdine : le bouton du tableau de bord envoie un appui, qui règle l'inverse
+de l'état lu. Une scène qui envoie 0 retire la sourdine (plafond appliqué) ;
+si elle est déjà retirée, rien n'est envoyé.
 
 ## Boutons de la configuration
 
 - **Vérifier les lecteurs** : l'état de chaque lecteur créé (marche, source,
-  volume, sourdine) et le plafond en vigueur.
+  volume, sourdine) et le plafond en vigueur, en 25 secondes au plus (un
+  lecteur qui n'a pas pu être lu à temps est signalé « non lu »).
 - **Lister les sources et épingles** : relance la recherche, puis liste les
   sources visibles et les épingles de chaque lecteur.
 

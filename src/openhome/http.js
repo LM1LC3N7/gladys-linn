@@ -82,16 +82,28 @@ export function httpRequest({
         },
       },
       (response) => {
+        // An answer arrived: the request reached the device, which may have
+        // acted on it whatever comes next (`maybeSent`).
         const status = response.statusCode ?? 0;
+        const tooLarge = () =>
+          new OpenhomeError('too_large', `answer over ${Math.round(maxBytes / 1024)} KB`, {
+            status,
+            maybeSent: true,
+          });
         if (status >= 300 && status < 400) {
           response.resume();
-          fail(new OpenhomeError('redirect', `HTTP ${status} redirect refused`, { status }));
+          fail(
+            new OpenhomeError('redirect', `HTTP ${status} redirect refused`, {
+              status,
+              maybeSent: true,
+            }),
+          );
           return;
         }
         const declared = Number(response.headers['content-length']);
         if (Number.isFinite(declared) && declared > maxBytes) {
           response.resume();
-          fail(new OpenhomeError('too_large', `answer over ${Math.round(maxBytes / 1024)} KB`));
+          fail(tooLarge());
           return;
         }
         const chunks = [];
@@ -99,7 +111,7 @@ export function httpRequest({
         response.on('data', (chunk) => {
           total += chunk.length;
           if (total > maxBytes) {
-            fail(new OpenhomeError('too_large', `answer over ${Math.round(maxBytes / 1024)} KB`));
+            fail(tooLarge());
             return;
           }
           chunks.push(chunk);

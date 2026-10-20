@@ -124,7 +124,8 @@ export function parseIdArray(text) {
 /**
  * The pins: GetIdArray gives one id per slot (0 = empty), ReadList the
  * metadata of the ids asked. A pin is invoked by its slot, from 1 (Linn's
- * Kazoo shows them so): [{ index, title }].
+ * Kazoo shows them so): [{ index, id, title }]; the id tells whether the
+ * slot was set again since it was read.
  */
 export function parsePins(idArray, listText, deviceMax) {
   const list = parseJson(listText);
@@ -143,7 +144,7 @@ export function parsePins(idArray, listText, deviceMax) {
     const entry = idArray[slot] > 0 ? byId.get(idArray[slot]) : undefined;
     const title = cleanText(typeof entry?.title === 'string' ? entry.title : undefined);
     if (entry && title) {
-      pins.push({ index: slot + 1, title });
+      pins.push({ index: slot + 1, id: idArray[slot], title });
     }
   }
   return pins;

@@ -61,10 +61,13 @@ test/fixtures/             the Linn description of openhomedevice (MIT)
   `openhome:<udn>`, the option values `source:<index>` / `pin:<slot>` and the
   manifest keys are stored in user scenes and dashboards. Never rename them.
 - **Volume cap**: every path that can make a player louder from Gladys
-  (volume, unmute, power on, source or pin in standby) goes through the cap,
+  (volume, unmute, power on, source, pin, play, next or previous in standby) goes through the cap,
   read just before the request leaves.
 - **No switch** for power: read-only state plus push buttons.
-- **Commands**: 3.5 s budget, never sent late, the result said exactly.
+- **Commands**: 3.5 s budget, never sent late, the result said exactly (any
+  HTTP answer means the request arrived). One queue job per request, its
+  timeout bounded by the deadline it belongs to; every command cancels the
+  read in flight, so Standby never waits for a slow player.
 - **Hostile answers**: bounded sizes (`LIMITS`), the XML parser refuses a
   `DOCTYPE`, nothing read from a device becomes an object key, control URLs
   stay on the host of the description, SSDP locations on the address that

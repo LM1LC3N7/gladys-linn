@@ -5,8 +5,10 @@
 // The core sends the M-SEARCH from the host network and relays the raw
 // answers: [{ source_ip, source_port, headers }]. A LOCATION is kept only
 // when it is plain http on the address that answered, and that address is a
-// private IPv4 one: an answer on the LAN must not steer the integration
-// towards Gladys itself, another host or the Internet.
+// private IPv4 one: an answer on the LAN never steers the integration
+// towards the loopback interface, the Internet, or a host other than the
+// one that answered. (The LAN address of the Gladys host itself is private,
+// so it is accepted like any other device of the LAN.)
 //
 // A device is kept when its description (the root device or one of its
 // embedded devices) has an OpenHome Product service. Every control URL is

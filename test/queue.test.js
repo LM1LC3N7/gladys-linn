@@ -35,7 +35,11 @@ test('a failing job does not stop the queue; close refuses what waits', async ()
     /boom/,
   );
   assert.equal(await queue.run(async () => 'next'), 'next');
-  const slow = queue.run(() => new Promise((resolve) => setTimeout(() => resolve('done'), 20)));
+  // A write in flight is never cancelled.
+  const slow = queue.run(
+    () => new Promise((resolve) => setTimeout(() => resolve('done'), 20)),
+    'command',
+  );
   const waiting = queue.run(async () => 'never');
   queue.close();
   await assert.rejects(waiting, /stopped/);
@@ -44,4 +48,24 @@ test('a failing job does not stop the queue; close refuses what waits', async ()
     queue.run(async () => 1),
     /stopped/,
   );
+});
+
+test('preempt cancels a read in flight at once, even one ignoring its signal', async () => {
+  const queue = new DeviceQueue();
+  const started = Date.now();
+  const read = queue.run(() => new Promise((resolve) => setTimeout(() => resolve('late'), 500)));
+  const write = queue.run(async () => 'standby', 'urgent', { abortable: false });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  queue.preempt();
+  await assert.rejects(read, (err) => err.code === 'aborted');
+  assert.equal(await write, 'standby');
+  assert.ok(Date.now() - started < 300);
+  // A write is not abortable.
+  const long = queue.run(
+    () => new Promise((resolve) => setTimeout(() => resolve('written'), 30)),
+    'command',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  queue.preempt();
+  assert.equal(await long, 'written');
 });

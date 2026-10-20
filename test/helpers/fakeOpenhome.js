@@ -97,7 +97,14 @@ export function initialState() {
   };
 }
 
-export async function startFakeDevice({ services, delays = {}, faults = {}, name } = {}) {
+export async function startFakeDevice({
+  services,
+  delays = {},
+  faults = {},
+  name,
+  volumeMax = 100,
+  wakeOnPlay = false,
+} = {}) {
   const state = initialState();
   const calls = [];
   const handlers = {
@@ -116,12 +123,19 @@ export async function startFakeDevice({ services, delays = {}, faults = {}, name
       state.volume = Number(args.Value);
     },
     'Volume#Mute': () => ({ Value: bool(state.mute) }),
+    'Volume#Characteristics': () => ({
+      VolumeMax: volumeMax,
+      VolumeUnity: volumeMax,
+      VolumeSteps: volumeMax,
+    }),
     'Volume#SetMute': (args) => {
       state.mute = args.Value === '1' || args.Value === 'true';
     },
     'Transport#TransportState': () => ({ State: state.transport }),
     'Transport#Play': () => {
       state.transport = 'Playing';
+      // ohMediaPlayer activates the source, out of standby.
+      if (wakeOnPlay) state.standby = false;
     },
     'Transport#Pause': () => {
       state.transport = 'Paused';
@@ -220,6 +234,7 @@ export async function startFakeDevice({ services, delays = {}, faults = {}, name
     port,
     state,
     calls,
+    delays,
     location: `http://127.0.0.1:${port}/desc.xml`,
     close: () =>
       new Promise((resolve) => {

@@ -232,9 +232,9 @@ test('values: pins from GetIdArray and ReadList', () => {
     { id: 3, title: 'LP12', __proto__: { polluted: true } },
   ]);
   assert.deepEqual(parsePins(ids, list, 6), [
-    { index: 1, title: 'Sky' },
-    { index: 2, title: 'Playstation 4' },
-    { index: 4, title: 'LP12' },
+    { index: 1, id: 1, title: 'Sky' },
+    { index: 2, id: 2, title: 'Playstation 4' },
+    { index: 4, id: 3, title: 'LP12' },
   ]);
   assert.equal(parsePins(ids, 'not json', 6), undefined);
   assert.equal(parseIdArray('{"a":1}'), undefined);
@@ -265,11 +265,11 @@ test('HTTP: size cap, no redirect, deadline, Latin-1 declaration', async (t) => 
   const base = `http://127.0.0.1:${server.address().port}`;
   await assert.rejects(
     httpRequest({ url: new URL(`${base}/big`), maxBytes: 1_000 }),
-    (err) => err.code === 'too_large',
+    (err) => err.code === 'too_large' && err.maybeSent === true,
   );
   await assert.rejects(
     httpRequest({ url: new URL(`${base}/redirect`), maxBytes: 1_000 }),
-    (err) => err.code === 'redirect',
+    (err) => err.code === 'redirect' && err.maybeSent === true,
   );
   await assert.rejects(
     httpRequest({ url: new URL(`${base}/slow`), maxBytes: 1_000, timeout: 100 }),
@@ -283,4 +283,33 @@ test('HTTP: size cap, no redirect, deadline, Latin-1 declaration', async (t) => 
   assert.equal(textOf(parseXml(text)), 'café');
   assert.equal(decode(Buffer.from('<a>é</a>')), '<a>é</a>');
   assert.equal(find(parseXml('<a><b><c>1</c></b></a>'), 'c').children[0], '1');
+});
+
+test('XML: 256k `&` without `;` stay linear, in a text and in an attribute', () => {
+  const amps = '&'.repeat(256 * 1024);
+  for (const xml of [`<a>${amps}</a>`, `<a b="${amps}"/>`]) {
+    const started = Date.now();
+    parseXml(xml);
+    const ms = Date.now() - started;
+    assert.ok(ms < 250, `${ms} ms`);
+  }
+  assert.equal(textOf(parseXml('<a>&amp;&#x41;&lt;&unknown;&</a>')), '&A<&unknown;&');
+});
+
+test('SOAP: only a 200 is a success; an answer after the request means maybe sent', () => {
+  const ok =
+    '<s:Envelope xmlns:s="x"><s:Body><u:SetVolumeResponse xmlns:u="y"></u:SetVolumeResponse></s:Body></s:Envelope>';
+  assert.equal(Object.keys(parseResponse('SetVolume', ok, 200)).length, 0);
+  assert.throws(
+    () => parseResponse('SetVolume', ok, 500),
+    (err) => err.code === 'status' && err.maybeSent === true,
+  );
+  assert.throws(
+    () => parseResponse('SetVolume', 'Internal Server Error', 500),
+    (err) => err.code === 'status' && err.maybeSent === true,
+  );
+  assert.throws(
+    () => parseResponse('SetVolume', '<x/>', 200),
+    (err) => err.code === 'answer' && err.maybeSent === true,
+  );
 });

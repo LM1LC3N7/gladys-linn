@@ -3,7 +3,8 @@
 // uses, as in openhomedevice (MIT, Barry John Williams) ported to JavaScript:
 //
 //   Product   Standby, SetStandby, SourceIndex, SetSourceIndex, SourceXml
-//   Volume    Volume, SetVolume, Mute, SetMute (absent at unity gain)
+//   Volume    Volume, SetVolume, Mute, SetMute, Characteristics (VolumeMax);
+//             absent at unity gain
 //   Transport TransportState, Play, Pause, Stop, SkipNext, SkipPrevious;
 //             without it (older firmware, software players) the Radio or
 //             Playlist service of the current source, as openhomedevice does
@@ -173,17 +174,26 @@ export class OpenhomeClient {
     return parseMetatext(out.Value);
   }
 
-  /** The pins set on the device: [{ index, title }] ([] without a Pins service). */
-  async pins(options) {
-    if (!this.has(SERVICES.PINS)) {
-      return [];
-    }
-    const max = parseUint((await this.call(SERVICES.PINS, 'GetDeviceMax', {}, options)).DeviceMax);
-    const idText = (await this.call(SERVICES.PINS, 'GetIdArray', {}, options)).IdArray;
-    const ids = parseIdArray(idText);
+  /**
+   * The pins, one request per call so the app can queue each one (a
+   * Standby never waits behind the three): the slot count, the id of each
+   * slot (0 = empty), then the metadata of the ids set.
+   */
+  async pinDeviceMax(options) {
+    const out = await this.call(SERVICES.PINS, 'GetDeviceMax', {}, options);
+    return parseUint(out.DeviceMax);
+  }
+
+  async pinIds(options) {
+    const ids = parseIdArray((await this.call(SERVICES.PINS, 'GetIdArray', {}, options)).IdArray);
     if (!ids) {
       throw new OpenhomeError('answer', 'GetIdArray: unreadable');
     }
+    return ids;
+  }
+
+  /** [{ index, id, title }] for the slots of `ids` that are set. */
+  async pinList(ids, max, options) {
     const listed = ids.filter((id) => id > 0);
     if (listed.length === 0) {
       return [];
@@ -199,6 +209,13 @@ export class OpenhomeClient {
       throw new OpenhomeError('answer', 'ReadList: unreadable');
     }
     return pins;
+  }
+
+  /** Volume.Characteristics: the device's maximum volume step, or undefined. */
+  async volumeMax(options) {
+    const out = await this.call(SERVICES.VOLUME, 'Characteristics', {}, options);
+    const max = parseUint(out.VolumeMax);
+    return max > 0 ? max : undefined;
   }
 
   // --- Commands ----------------------------------------------------------------

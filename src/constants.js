@@ -88,6 +88,8 @@ export const TIMINGS = Object.freeze({
   scanSeconds: 5,
   /** Descriptions read at the same time during a search. */
   scanConcurrency: 4,
+  /** The "Check the players" button reads within this (its manifest timeout is 30 s). */
+  checkBudget: 25_000,
   /** Background round: status, automatic search. */
   tick: 60_000,
 });

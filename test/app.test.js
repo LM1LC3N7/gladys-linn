@@ -9,7 +9,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
-import { LinnApp, parseVolumeCommand } from '../src/app.js';
+import { LinnApp, muteIntent, parseVolumeCommand } from '../src/app.js';
+import { httpRequest } from '../src/openhome/http.js';
 import { NOTHING, TIMINGS } from '../src/constants.js';
 import { registerHandlers } from '../src/handlers.js';
 import { UDN, startFakeDevice } from './helpers/fakeOpenhome.js';
@@ -53,7 +54,10 @@ async function waitFor(predicate, what, timeout = 3_000) {
   assert.fail(`timed out waiting for ${what}`);
 }
 
-async function setup(t, { deviceOptions, config = {}, scanResults = {}, timings = {} } = {}) {
+async function setup(
+  t,
+  { deviceOptions, config = {}, scanResults = {}, timings = {}, request } = {},
+) {
   const device = await startFakeDevice(deviceOptions);
   t.after(() => device.close());
   const gladys = createFakeGladys({
@@ -68,7 +72,13 @@ async function setup(t, { deviceOptions, config = {}, scanResults = {}, timings 
       (...args) => logs.push(`${level} ${args.map((a) => a?.message ?? a).join(' ')}`),
     ]),
   );
-  const app = new LinnApp({ gladys, logger, timers, timings: { ...FAST, ...timings } });
+  const app = new LinnApp({
+    gladys,
+    logger,
+    timers,
+    timings: { ...FAST, ...timings },
+    ...(request ? { request } : {}),
+  });
   registerHandlers(gladys, app, logger);
   t.after(() => app.stop());
   await gladys.connect();
@@ -349,4 +359,139 @@ test.after(() => {
   for (const handle of pending) {
     globalThis.clearTimeout(handle);
   }
+});
+
+// --- Review 1 -----------------------------------------------------------------
+
+const timed = async (promise) => {
+  const started = Date.now();
+  const result = await promise;
+  return { ...result, ms: Date.now() - started };
+};
+
+test('Standby during a slow wake-up: never blocked, Power on acked in time', async (t) => {
+  const { gladys, device: fake } = await setup(t, {
+    config: { max_volume: 50 },
+    timings: { requestTimeout: 3_000, wakeCheckDelay: 2_000 },
+  });
+  const device = await createDevice(gladys);
+  fake.state.standby = true;
+  fake.state.volume = 80;
+  // A slow player: every read of the wake-up check takes 2.8 s.
+  for (const key of ['Product#Standby', 'Volume#Volume', 'Volume#SetVolume']) {
+    fake.delays[key] = 2_800;
+  }
+  const on = timed(set(gladys, device, 'power_on'));
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  const off = timed(set(gladys, device, 'standby'));
+  const [powerOn, standby] = await Promise.all([on, off]);
+  assert.ok(powerOn.ms < 4_000, `Power on acked after ${powerOn.ms} ms`);
+  assert.equal(powerOn.success, true);
+  assert.equal(standby.success, true, JSON.stringify(standby));
+  assert.ok(standby.ms < 1_500, `Standby acked after ${standby.ms} ms`);
+  assert.equal(fake.state.standby, true, 'the player is in standby');
+});
+
+test('Standby during a slow read of the pins: never blocked', async (t) => {
+  const { gladys, device: fake, app } = await setup(t);
+  const device = await createDevice(gladys);
+  for (const key of ['Pins#GetDeviceMax', 'Pins#GetIdArray', 'Pins#ReadList']) {
+    fake.delays[key] = 2_500;
+  }
+  const record = app.records.get(UDN);
+  app.timings = { ...app.timings, requestTimeout: 3_000 };
+  const reading = app.readLists(record).catch(() => undefined);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const standby = await timed(set(gladys, device, 'standby'));
+  assert.equal(standby.success, true, JSON.stringify(standby));
+  assert.ok(standby.ms < 1_000, `Standby acked after ${standby.ms} ms`);
+  assert.equal(fake.state.standby, true);
+  await reading;
+});
+
+test('an HTTP 500 after the device acted: "sent, without confirmation"', async (t) => {
+  const request = async (options) => {
+    const answer = await httpRequest(options);
+    return /#SetVolume"$/.test(options.headers?.SOAPACTION ?? '')
+      ? { status: 500, text: 'Internal Server Error' }
+      : answer;
+  };
+  const { gladys, device: fake } = await setup(t, { request });
+  const device = await createDevice(gladys);
+  const ack = await set(gladys, device, 'volume', 40);
+  assert.equal(ack.success, false);
+  assert.match(JSON.stringify(ack), /Volume sent, without confirmation \(SetVolume: HTTP 500\)/);
+  assert.equal(fake.state.volume, 40);
+});
+
+test('Play on a player in standby that wakes on Play: the cap is applied', async (t) => {
+  const { gladys, device: fake } = await setup(t, {
+    config: { max_volume: 50 },
+    deviceOptions: { wakeOnPlay: true },
+  });
+  const device = await createDevice(gladys);
+  fake.state.standby = true;
+  fake.state.volume = 85;
+  const ack = await set(gladys, device, 'play');
+  assert.equal(ack.success, true);
+  assert.equal(fake.state.standby, false);
+  await waitFor(() => fake.state.volume === 50, 'the cap after Play');
+});
+
+test('mute: 0 unmutes (cap first), a press toggles, nothing sent when already as asked', async (t) => {
+  const { gladys, device: fake } = await setup(t, { config: { max_volume: 30 } });
+  const device = await createDevice(gladys);
+  fake.state.mute = false;
+  const before = fake.calls.filter((c) => c === 'Volume#SetMute').length;
+  await set(gladys, device, 'mute', 0);
+  assert.equal(fake.calls.filter((c) => c === 'Volume#SetMute').length, before, 'nothing sent');
+  fake.state.mute = true;
+  fake.state.volume = 70;
+  await set(gladys, device, 'mute', 0);
+  assert.equal(fake.state.mute, false);
+  assert.equal(fake.state.volume, 30);
+  await set(gladys, device, 'mute', 1);
+  assert.equal(fake.state.mute, true, 'a press toggles');
+  assert.equal(muteIntent('0'), 'unmute');
+  assert.equal(muteIntent(1), 'toggle');
+  assert.equal(muteIntent(null), 'toggle');
+});
+
+test('a pin set again on the device since the list was read is refused', async (t) => {
+  const { gladys, device: fake } = await setup(t);
+  const device = await createDevice(gladys);
+  fake.state.pinSlots[3] = 9;
+  fake.state.pins[9] = { id: 9, title: 'Other' };
+  const ack = await set(gladys, device, 'source', 'pin:4');
+  assert.equal(ack.success, false);
+  assert.match(JSON.stringify(ack), /pin 4 changed on the device, nothing sent/);
+  assert.ok(!fake.calls.includes('Pins#InvokeIndex'));
+});
+
+test('a device whose VolumeMax is not 100: the volume and the cap are scaled', async (t) => {
+  const { gladys, device: fake } = await setup(t, {
+    config: { max_volume: 50 },
+    deviceOptions: { volumeMax: 50 },
+  });
+  fake.state.volume = 15;
+  const device = await createDevice(gladys);
+  await waitFor(() => gladys.fake.lastState(id('volume')) === 30, 'the volume in percent');
+  await set(gladys, device, 'volume', 90);
+  assert.equal(fake.state.volume, 25, '50 % of 50 steps');
+});
+
+test('records neither created nor seen again are forgotten', async (t) => {
+  const { gladys, app } = await setup(t);
+  await discovered(gladys);
+  assert.equal(app.records.size, 1);
+  await app.start({ description_urls: '' });
+  assert.equal(app.records.size, 0);
+});
+
+test('"Check the players" stops at its time limit', async (t) => {
+  const { gladys, device: fake } = await setup(t, { timings: { checkBudget: 300 } });
+  await createDevice(gladys);
+  fake.delays['Product#Standby'] = 350;
+  const check = JSON.stringify(await gladys.fake.action('check_devices'));
+  assert.match(check, /not read|pas de réponse/);
 });

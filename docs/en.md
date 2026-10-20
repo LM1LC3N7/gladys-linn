@@ -17,19 +17,22 @@ The [DLNA integration by guim31](https://github.com/guim31/gladys-dlna)
 `AVTransport` and `RenderingControl` services): play a URL or a media server,
 volume, playback. It works with a Linn too.
 
-This one does something else: it only talks to the **OpenHome services**
-(`urn:av-openhome-org`), which DLNA does not have:
+This one takes another path: it only talks to the **OpenHome services**
+(`urn:av-openhome-org`), never to `AVTransport` or `RenderingControl`. It brings
+what DLNA has not got:
 
 - the **sources** of the device (Playlist, Radio, Songcast, HDMI, analogue,
   digital inputs…), picked from a list;
 - the **pins** set in the Linn app: a radio, a playlist, an input, recalled in
   one click;
 - **standby** (power on, standby, power state);
-- the **capped** volume and the mute of the OpenHome Volume service.
+  It also drives the volume (**capped**), the mute, the playback and the title,
+  through the OpenHome Volume, Transport and Info services.
 
 It does not play URLs, browse media servers or play notifications: keep the
 DLNA integration for that. Both can run side by side; the same player can
-then be created in each.
+then be created in each. Beware: the volume cap of this integration does not
+apply to what the DLNA integration sends to the same player.
 
 ## Installation
 
@@ -45,18 +48,18 @@ tool on your computer shows it.
 
 ## What you get
 
-| Feature        | Gladys type                | Note                                                |
-| -------------- | -------------------------- | --------------------------------------------------- |
-| Power          | binary state (read only)   | 1 on, 0 in standby or unreachable                   |
-| Power on       | button                     | wakes the player from standby                       |
-| Standby        | button                     | puts the player in standby                          |
-| Volume         | music / volume (0 to 100)  | capped; absent when the player has a fixed volume   |
-| Mute           | button (television / mute) | each press reads the state, then sets the opposite  |
-| Play, pause    | music buttons              |                                                     |
-| Next, previous | music buttons              | not on a radio                                      |
-| Playback       | music state (read only)    | 1 playing, 0 otherwise                              |
-| Source         | list                       | the visible sources, then the pins ("3. FIP")       |
-| Now playing    | text (read only)           | "Artist - Title" (or the radio text); "—" otherwise |
+| Feature        | Gladys type                | Note                                                  |
+| -------------- | -------------------------- | ----------------------------------------------------- |
+| Power          | binary state (read only)   | 1 on, 0 in standby or unreachable                     |
+| Power on       | button                     | wakes the player from standby                         |
+| Standby        | button                     | puts the player in standby                            |
+| Volume         | music / volume (0 to 100)  | capped; absent when the player has a fixed volume     |
+| Mute           | button (television / mute) | a press reads the state, sets the opposite; 0 unmutes |
+| Play, pause    | music buttons              |                                                       |
+| Next, previous | music buttons              | not on a radio                                        |
+| Playback       | music state (read only)    | 1 playing, 0 otherwise                                |
+| Source         | list                       | the visible sources, then the pins ("3. FIP")         |
+| Now playing    | text (read only)           | "Artist - Title" (or the radio text); "—" otherwise   |
 
 On purpose, no **switch**: an "everything off" or "everything on" from a
 voice assistant or a scene never wakes up or cuts your player.
@@ -71,10 +74,14 @@ Gladys would make it audible:
 
 - **Unmuting**: if the volume is above the cap, it is lowered to the cap
   first, then the mute is removed.
-- **Power on**, or choosing a source or a pin while the player is in standby:
-  after the wake-up, the volume is read and lowered to the cap if above it.
+- **Power on**, or a source, a pin, Play, Next or Previous while the player is
+  in standby (a Linn then leaves standby): after the wake-up, the volume is read and lowered to the cap if above it.
   If the player takes time to wake up, the integration checks again every
-  2.5 s for about 15 s.
+  2.5 s for about 15 s, unless Standby is pressed meanwhile.
+
+The cap is a percentage: when the player announces a maximum volume other
+than 100 (`Volume.Characteristics`), the volume and the cap are scaled to its
+steps.
 
 ## Reading the state
 
@@ -93,17 +100,28 @@ address (the player is recognized by its UDN).
 
 ## Commands
 
-Every command gets an answer within 4 seconds (Gladys waits 5 seconds). A
-command that could not leave says "not sent"; a command that left without an
-answer from the player says "sent, without confirmation"; a refusal by the
-player (a SOAP fault) is quoted as is. Standby and mute go before the other
-commands waiting. A source is checked against the list read again from the
-player before sending; a pin must exist on the player.
+Every command gets an answer within 4 seconds (Gladys waits 5 seconds): each
+request is bounded by what is left of that time, and the cap check after a
+wake-up goes on in the background if needed. A command that could not leave
+says "not sent"; a command that left but whose answer is missing or unusable
+(timeout, HTTP error) says "sent, without confirmation"; a refusal by the
+player (a SOAP fault) is quoted as is.
+
+A command cancels the state read in flight and goes before it; Standby and
+mute also go before the other commands waiting: **Standby never waits for a
+slow player**. A source is checked against the list read again from the
+player before sending; for a pin, the slot is read again and must still hold
+the same pin (else nothing is sent).
+
+Mute: the dashboard button sends a press, which sets the opposite of the state
+read. A scene sending 0 unmutes (cap applied); if already unmuted, nothing is
+sent.
 
 ## Configuration buttons
 
 - **Check the players**: the state of each created player (power, source,
-  volume, mute) and the cap in force.
+  volume, mute) and the cap in force, within 25 seconds (a player that could
+  not be read in time says "not read").
 - **List the sources and pins**: runs the search again, then lists the
   visible sources and the pins of each player.
 

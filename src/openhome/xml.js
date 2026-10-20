@@ -51,8 +51,11 @@ export function decodeEntities(text) {
       return out + text.slice(pos);
     }
     out += text.slice(pos, amp);
-    const semi = text.indexOf(';', amp + 1);
-    const body = semi === -1 || semi - amp > 10 ? '' : text.slice(amp + 1, semi);
+    // The `;` is looked for in the next 11 characters only: a long run of `&`
+    // without one stays linear (indexOf over the rest would be quadratic).
+    const near = text.slice(amp + 1, amp + 12).indexOf(';');
+    const semi = near === -1 ? -1 : amp + 1 + near;
+    const body = semi === -1 ? '' : text.slice(amp + 1, semi);
     if (body[0] === '#') {
       const hex = body[1] === 'x' || body[1] === 'X';
       const digits = body.slice(hex ? 2 : 1);

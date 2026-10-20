@@ -47,6 +47,11 @@ export const T = {
       `${label} : allumé${source}${volume}${muteFr}`,
     );
   },
+  notRead: (label) =>
+    both(
+      `${label}: not read (time limit of the button reached)`,
+      `${label} : non lu (temps du bouton écoulé)`,
+    ),
   noneFound: both(
     'No OpenHome device answers. SSDP must reach Gladys (same network, no VLAN between them), or type the description URL of the device in the configuration.',
     "Aucun appareil OpenHome ne répond. Le SSDP doit atteindre Gladys (même réseau, pas de VLAN entre les deux), ou saisissez l'URL de description de l'appareil dans la configuration.",
