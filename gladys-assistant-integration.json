@@ -1,177 +1,99 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Linn & OpenHome",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Linn and OpenHome network players, local: standby, volume, sources, pins, playback.",
+    "fr": "Lecteurs réseau Linn et OpenHome en local : veille, volume, sources, épingles, lecture."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-linn:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-linn/main/cover.png",
+  "categories": ["multimedia"],
+  "transports": ["local"],
+  "network_discovery": [{ "type": "ssdp", "st": "upnp:rootdevice" }],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Your Linn and OpenHome players, on your local network",
+        "fr": "Vos lecteurs Linn et OpenHome, sur votre réseau local"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Power on, standby, volume, mute, source, pins (the presets of the Linn app), play, pause, next, previous and the title playing of each player that has the OpenHome services (Linn DS and DSM, and other OpenHome renderers), through UPnP on your network, without any cloud. The players are found by an SSDP search and appear in the Discovery tab. The volume set from Gladys never goes above the cap below. This is not the generic DLNA integration: it only drives the OpenHome services DLNA does not have (sources, pins, standby). Never tested with a real device. Unofficial integration, not affiliated with Linn Products.",
+        "fr": "Allumage, veille, volume, sourdine, source, épingles (les préréglages de l'application Linn), lecture, pause, suivant, précédent et titre en cours de chaque lecteur doté des services OpenHome (Linn DS et DSM, et autres lecteurs OpenHome), par UPnP sur votre réseau, sans aucun cloud. Les lecteurs sont trouvés par une recherche SSDP et apparaissent dans l'onglet Découverte. Le volume réglé depuis Gladys ne dépasse jamais le plafond ci-dessous. Ce n'est pas l'intégration DLNA générique : elle ne pilote que les services OpenHome que le DLNA n'a pas (sources, épingles, veille). Jamais testé avec un vrai appareil. Intégration non officielle, sans lien avec Linn Products."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/LM1LC3N7/gladys-linn/blob/main/docs/fr.md",
+          "label": { "en": "Guide (French)", "fr": "Guide (français)" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-linn/blob/main/docs/en.md",
+          "label": { "en": "Guide (English)", "fr": "Guide (anglais)" }
         }
       ]
     },
     {
-      "key": "latitude",
+      "key": "max_volume",
       "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
+      "label": { "en": "Volume cap (%)", "fr": "Plafond de volume (%)" },
       "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+        "en": "The highest volume Gladys may set, from 1 to 100 (100: no cap). A higher volume asked by a scene, a voice assistant or the dashboard is set to this cap; unmuting and waking a player up bring it back under the cap first. The volume set on the player itself (knob, remote, app) is not changed.",
+        "fr": "Le volume le plus fort que Gladys peut régler, de 1 à 100 (100 : pas de plafond). Un volume plus fort demandé par une scène, un assistant vocal ou le tableau de bord est ramené à ce plafond ; couper la sourdine et réveiller un lecteur le ramènent d'abord sous le plafond. Le volume réglé sur le lecteur lui-même (bouton, télécommande, application) n'est pas modifié."
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
-    },
-    {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
       "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
+      "default": 50,
+      "min": 1,
+      "max": 100
     },
     {
-      "key": "poll_frequency",
+      "key": "poll_interval",
       "type": "number",
       "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "How often each player is read, from 5 to 300 seconds. A player that does not answer is tried again at spaced intervals (up to 5 minutes).",
+        "fr": "Fréquence de lecture de chaque lecteur, de 5 à 300 secondes. Un lecteur qui ne répond pas est réessayé à intervalles espacés (jusqu'à 5 minutes)."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": 10,
+      "min": 5,
+      "max": 300
+    },
+    {
+      "key": "description_urls",
+      "type": "string",
+      "label": {
+        "en": "Description URLs (optional)",
+        "fr": "URL de description (facultatif)"
+      },
+      "description": {
+        "en": "Only for a player the SSDP search cannot reach (another subnet or VLAN): the URL of its UPnP description, separated by commas. Most players are found without it.",
+        "fr": "Seulement pour un lecteur que la recherche SSDP n'atteint pas (autre sous-réseau ou VLAN) : l'URL de sa description UPnP, séparées par des virgules. La plupart des lecteurs sont trouvés sans."
+      },
+      "placeholder": {
+        "en": "http://192.168.1.30:55178/…/Upnp/device.xml",
+        "fr": "http://192.168.1.30:55178/…/Upnp/device.xml"
+      },
+      "required": false,
+      "default": ""
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
+      "key": "check_devices",
+      "label": { "en": "Check the players", "fr": "Vérifier les lecteurs" },
       "timeout_seconds": 30
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
-    }
-  ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
-      "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+      "key": "list_sources",
+      "label": {
+        "en": "List the sources and pins",
+        "fr": "Lister les sources et épingles"
       },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
-        }
-      ],
-      "variables": [
-        {
-          "key": "target",
-          "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
-        }
-      ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "timeout_seconds": 60
     }
   ]
 }

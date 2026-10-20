@@ -1,61 +1,127 @@
-# Demo Devices Template
+# Linn and OpenHome for Gladys
 
-This is the user documentation of the integration. Gladys re-hosts this file
-and shows a permanent **Documentation** link to it in the Configuration screen
-(in the user's language, with English as the fallback) — it is when
-configuring that the user needs it most. Keep the short onboarding hints in
-the `section` blocks of the manifest `config_schema`; put the long
-step-by-step (screenshots, troubleshooting…) here.
+Drive your **Linn** network players (DS, DSM, Majik, Selekt, Klimax…) and the
+other **OpenHome** devices from Gladys, locally, without any cloud: power on,
+standby, volume, mute, source, pins (the presets of the Linn app), play,
+pause, next, previous and the title playing.
+
+> **Important.** This integration has never been tested with a real device:
+> it was written from the `openhomedevice` library (the one of Home
+> Assistant) and tested against a fake device only. Your feedback is welcome.
+> Unofficial integration, not affiliated with Linn Products.
+
+## This is not the DLNA integration
+
+The [DLNA integration by guim31](https://github.com/guim31/gladys-dlna)
+(`guim31/gladys-dlna`) drives any generic UPnP AV renderer (the
+`AVTransport` and `RenderingControl` services): play a URL or a media server,
+volume, playback. It works with a Linn too.
+
+This one does something else: it only talks to the **OpenHome services**
+(`urn:av-openhome-org`), which DLNA does not have:
+
+- the **sources** of the device (Playlist, Radio, Songcast, HDMI, analogue,
+  digital inputs…), picked from a list;
+- the **pins** set in the Linn app: a radio, a playlist, an input, recalled in
+  one click;
+- **standby** (power on, standby, power state);
+- the **capped** volume and the mute of the OpenHome Volume service.
+
+It does not play URLs, browse media servers or play notifications: keep the
+DLNA integration for that. Both can run side by side; the same player can
+then be created in each.
+
+## Installation
+
+1. In Gladys, install the **Linn & OpenHome** integration.
+2. Choose the **volume cap** (50 by default) in its configuration.
+3. Open the **Discovery** tab: the players found by the SSDP search (run by
+   Gladys on your network) are listed. Create them.
+
+A player on another subnet or VLAN is not found by SSDP: type the URL of its
+**UPnP description** in the configuration instead (optional field, for
+example `http://192.168.1.30:55178/<uuid>/Upnp/device.xml`). A UPnP discovery
+tool on your computer shows it.
 
 ## What you get
 
-Six demo devices show up after installation: a weather station (real data
-from Open-Meteo), a switch, a dimmable light, a smart plug with power
-metering, a motion sensor and a camera.
+| Feature        | Gladys type                | Note                                                |
+| -------------- | -------------------------- | --------------------------------------------------- |
+| Power          | binary state (read only)   | 1 on, 0 in standby or unreachable                   |
+| Power on       | button                     | wakes the player from standby                       |
+| Standby        | button                     | puts the player in standby                          |
+| Volume         | music / volume (0 to 100)  | capped; absent when the player has a fixed volume   |
+| Mute           | button (television / mute) | each press reads the state, then sets the opposite  |
+| Play, pause    | music buttons              |                                                     |
+| Next, previous | music buttons              | not on a radio                                      |
+| Playback       | music state (read only)    | 1 playing, 0 otherwise                              |
+| Source         | list                       | the visible sources, then the pins ("3. FIP")       |
+| Now playing    | text (read only)           | "Artist - Title" (or the radio text); "—" otherwise |
 
-## Configuration
+On purpose, no **switch**: an "everything off" or "everything on" from a
+voice assistant or a scene never wakes up or cuts your player.
 
-1. Open the **Configuration** tab of the integration.
-2. Set the **latitude** and **longitude** the demo weather station should
-   observe (they default to Paris), and pick your temperature unit.
-   The **refresh interval** sets how often the weather station and the
-   plug's power are read: every 5 minutes by default, every minute at most.
-3. Save: the devices appear in the **Discovery** tab, ready to be added.
+## Volume cap
 
-The **Prefer the local connection** toggle drives the demo plug: it reports
-the channel it actually uses as a badge (local or cloud), with an orange dot
-when it runs degraded (local refused, cloud fallback).
+The volume asked from Gladys (dashboard, scene, voice assistant) never goes
+above the cap of the configuration: a higher volume is set to the cap. The
+cap is read just before sending: a new value saved applies at once. The volume
+set on the player itself (knob, remote, app) is not changed, except where
+Gladys would make it audible:
 
-## Actions
+- **Unmuting**: if the volume is above the cap, it is lowered to the cap
+  first, then the mute is removed.
+- **Power on**, or choosing a source or a pin while the player is in standby:
+  after the wake-up, the volume is read and lowered to the cap if above it.
+  If the player takes time to wake up, the integration checks again every
+  2.5 s for about 15 s.
 
-- **Test the weather provider** — performs a live request to Open-Meteo and
-  shows the current temperature and humidity under the button.
-- **Identify a device** — pick one of your devices in the list and it will
-  signal itself (the demo light "blinks" in the logs).
+## Reading the state
 
-## Scenes
+The container of the integration has no inbound port: UPnP events (GENA)
+cannot reach it. The integration therefore reads each created player at a
+regular interval (10 s by default, 5 to 300 s): standby, source, volume, mute,
+playback state, and the title only when its counters say it changed. One
+request at a time per player. In standby, only the standby is read. The
+source list and the pins are read again every 30 minutes, or when an unknown
+source is selected.
 
-The integration adds its own cards to the scene editor (Gladys 5.1 or
-later), under the **Integrations** category:
+A player that stops answering is shown as off, named in the status of the
+integration, and tried again at spaced intervals (up to 5 minutes). A new
+SSDP search then runs by itself at most every 10 minutes, to follow a new
+address (the player is recognized by its UDN).
 
-- **Motion detected** (trigger) — starts the scene when a demo motion sensor
-  sees something move. Optionally pick the sensor and what moved (person,
-  animal); left empty, any detection matches. The following actions can
-  read what moved with `{{triggerEvent.data.target}}`.
-- **Identify a device** (action) — makes the chosen device signal itself.
-  It returns whether the device could signal itself, so the following
-  actions can depend on it.
+## Commands
 
-## Dashboard
+Every command gets an answer within 4 seconds (Gladys waits 5 seconds). A
+command that could not leave says "not sent"; a command that left without an
+answer from the player says "sent, without confirmation"; a refusal by the
+player (a SOAP fault) is quoted as is. Standby and mute go before the other
+commands waiting. A source is checked against the list read again from the
+player before sending; a pin must exist on the player.
 
-Add the **Demo status** widget to a dashboard: it shows the live
-temperature of the weather station and the power of the office plug, the
-connection the plug currently uses (orange when degraded) and the observed
-location. Its **Identify the light** button makes the demo light signal
-itself.
+## Configuration buttons
 
-## Troubleshooting
+- **Check the players**: the state of each created player (power, source,
+  volume, mute) and the cap in force.
+- **List the sources and pins**: runs the search again, then lists the
+  visible sources and the pins of each player.
 
-The integration logs everything it does: check the integration logs from the
-Gladys UI (or `docker logs` on the host) with `LOG_LEVEL=debug` for the full
-detail.
+## Security, data and privacy
+
+- The integration asks for no account and no password: OpenHome has none. It
+  writes nothing on disk. Nothing leaves your local network.
+- The answers of the players are bounded (256 KB for a description, 64 KB for
+  a SOAP answer) and read by a linear XML parser that refuses any `DOCTYPE`:
+  no external or internal entity is ever resolved.
+- An SSDP answer is kept only when its description URL is `http` on the
+  private address that answered; every control URL must stay on the same
+  machine and port as the description.
+
+## Known limits
+
+- No Songcast (room groups), URL playback, notification, balance, sleep timer
+  or firmware update.
+- No UPnP events: a change made on the player shows at the next read at the
+  latest.
+- Never tested with a real device: the real answers may differ.
