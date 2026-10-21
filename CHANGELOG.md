@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-21
+
 ### Added
 
 - One device per Linn or OpenHome player, found by an SSDP search through
@@ -42,4 +44,5 @@ the notes of the version's GitHub Release.
 - Devices neither created nor seen by the last search are forgotten.
 - "Check the players" answers within 25 s.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-linn/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-linn/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-linn/releases/tag/v0.1.1
