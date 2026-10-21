@@ -25,9 +25,10 @@ the notes of the version's GitHub Release.
 - "Check the players" and "List the sources and pins" buttons.
 - Bounded answers and a linear XML parser that refuses any `DOCTYPE`.
 - Every request is one job of the device queue, bounded by the deadline of
-  its command: Standby cancels the read in flight, and a command that has
-  not written yet ("not sent (Standby went first)"); it only waits for a write
-  already sent. Power on is acked within the 5 s Gladys waits.
+  its command: Standby cancels the read in flight and the command still
+  reading, and a command waiting before it that could wake the player (Power
+  on, source, pin, play, next, previous) is no longer sent ("not sent (Standby
+  went first)"); Standby only waits for a write already sent. Power on is acked within the 5 s Gladys waits.
 - A `VolumeMax` over 100 is ignored (0-100 kept): the scale only ever makes a
   player quieter.
 - Play, next and previous on a player in standby check the volume cap after

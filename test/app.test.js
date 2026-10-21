@@ -544,3 +544,23 @@ test('a VolumeMax over 100 is ignored: the cap never gets louder', async (t) => 
   await set(gladys, device, 'volume', 50);
   assert.equal(fake.state.volume, 50, 'never 500');
 });
+
+test('a command waiting before a Standby that could wake the player is not sent after it', async (t) => {
+  const { gladys, device: fake } = await setup(t, { timings: { requestTimeout: 3_000 } });
+  const device = await createDevice(gladys);
+  fake.delays['Volume#SetVolume'] = 1_500;
+  const volume = set(gladys, device, 'volume', 20);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const source = set(gladys, device, 'source', 'source:3');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const standby = await set(gladys, device, 'standby');
+  assert.equal((await volume).success, true);
+  assert.equal(standby.success, true, JSON.stringify(standby));
+  const chosen = await source;
+  assert.equal(chosen.success, false);
+  assert.match(JSON.stringify(chosen), /not sent \(Standby went first\)/);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(fake.state.standby, true, 'the last request, Standby, holds');
+  assert.notEqual(fake.state.sourceIndex, 3);
+  assert.ok(!fake.calls.includes('Product#SetSourceIndex'));
+});

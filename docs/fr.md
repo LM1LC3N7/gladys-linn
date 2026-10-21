@@ -113,10 +113,13 @@ HTTP) est signalée « sent, without confirmation » (envoyée, sans
 confirmation) ; un refus du lecteur (erreur SOAP) est cité tel quel.
 
 Une commande annule la lecture d'état en cours et passe avant elle ; Veille et
-sourdine passent aussi avant les autres commandes en attente. **Veille annule
-aussi une commande qui n'a encore rien envoyé** (elle répond alors « not sent
-(Standby went first) ») : elle n'attend qu'une écriture déjà partie, dans la
-limite de son délai, jamais une lecture ni un lecteur lent à répondre. La source choisie est vérifiée sur la liste relue du
+sourdine passent aussi avant les autres commandes en attente. **Veille l'emporte sur
+les commandes qui n'ont encore rien envoyé** : celle en cours de lecture est
+annulée, et celles qui attendent dans la file et pourraient rallumer le lecteur
+(Allumer, Source, épingle, Lecture, Suivant, Précédent) ne partent plus ; elles
+répondent « not sent (Standby went first) ». Veille n'attend qu'une écriture
+déjà partie, dans la limite de son délai, jamais une lecture ni un lecteur lent
+à répondre. La source choisie est vérifiée sur la liste relue du
 lecteur avant l'envoi ; pour une épingle, l'emplacement est relu et doit
 toujours contenir la même épingle (sinon rien n'est envoyé).
 

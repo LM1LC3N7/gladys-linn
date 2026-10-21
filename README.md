@@ -44,8 +44,9 @@ Unofficial integration, not affiliated with Linn Products.
 - **Safety**: the volume set from Gladys never goes above the cap (unmuting
   and waking up included); no switch an "everything off" could reach; a
   command is answered within 3.5 s, "not sent" or "sent, without
-  confirmation" said exactly; Standby cancels the read in flight and any
-  command that has not written yet: it only waits for a write already sent.
+  confirmation" said exactly; Standby cancels the read in flight and the
+  command still reading, and a command waiting before it that could wake the
+  player is no longer sent: Standby only waits for a write already sent.
 - **Hostile answers**: descriptions bounded to 256 KB, SOAP answers to 64 KB,
   a linear XML parser that refuses any `DOCTYPE` (no entity ever resolved),
   no redirect, control URLs kept on the host of the description, SSDP

@@ -30,6 +30,15 @@ export { SSDP_ST };
 /** Commands that go before the other commands waiting: quieting down never waits. */
 const URGENT = new Set([FEATURES.STANDBY, FEATURES.MUTE]);
 
+/** Commands that can take a player out of standby (a Standby pressed after them wins). */
+const WAKES = new Set([
+  FEATURES.POWER_ON,
+  FEATURES.SOURCE,
+  FEATURES.PLAY,
+  FEATURES.NEXT,
+  FEATURES.PREVIOUS,
+]);
+
 /**
  * The volume of a command, validated strictly: an integer 0..100 given as a
  * number or as a string of digits. null, '', true, 12.5, '12abc' are refused.
@@ -758,15 +767,22 @@ export class LinnApp {
       record.standbySeq += 1;
       this.cancelWakeCheck(record);
     }
+    // A Standby pressed after this command arrived wins: a command that can
+    // wake the player, still waiting in the queue, is then not sent.
+    const seq = record.standbySeq;
     try {
-      // Before queueing (never the job itself): a read in flight (poll, list, volume check) is cancelled: a command
-      // never waits behind a slow read. A Standby also cancels a command
-      // still reading; a write already sent is never cancelled.
+      // Before queueing (never the job itself): a read in flight (poll,
+      // list, volume check) is cancelled, so a command never waits behind a
+      // slow read. A Standby also cancels a command still reading; a write
+      // already sent is never cancelled.
       record.queue.preempt({ commands: key === FEATURES.STANDBY });
       const job = record.queue.run(
         (signal, control) => {
           if (this.remaining(started) < this.timings.minRequest) {
             throw new CommandError(`${deviceName(record)}: busy, nothing sent`);
+          }
+          if (WAKES.has(key) && seq !== record.standbySeq) {
+            throw new CommandError(`${deviceName(record)}: not sent (Standby went first)`);
           }
           return this.command(record, key, command, started, { signal, control });
         },

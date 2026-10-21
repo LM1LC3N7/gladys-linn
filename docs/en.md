@@ -109,10 +109,12 @@ says "not sent"; a command that left but whose answer is missing or unusable
 player (a SOAP fault) is quoted as is.
 
 A command cancels the state read in flight and goes before it; Standby and
-mute also go before the other commands waiting. **Standby also cancels a
-command that has sent nothing yet** (it then says "not sent (Standby went
-first)"): it only waits for a write already sent, within its time limit,
-never for a read or a player slow to answer. A source is checked against the list read again from the
+mute also go before the other commands waiting. **Standby wins over the
+commands that have sent nothing yet**: the one reading is cancelled, and those
+waiting in the queue that could wake the player (Power on, Source, pin, Play,
+Next, Previous) are no longer sent; they say "not sent (Standby went first)".
+Standby only waits for a write already sent, within its time limit, never for
+a read or a player slow to answer. A source is checked against the list read again from the
 player before sending; for a pin, the slot is read again and must still hold
 the same pin (else nothing is sent).
 

@@ -38,6 +38,10 @@ up to date at the end of every milestone.
       signal, the job is marked writing just before its first write, and a
       cancelled command never writes afterwards); a `VolumeMax` of 100 or
       more is ignored (scale only downwards).
+- [x] **Milestone 1 fixes — review 3** (2026-10-21): a command that can
+      wake the player (Power on, source, pin, play, next, previous) and was
+      still waiting when a Standby arrived is not sent (`standbySeq` kept
+      at its arrival, checked at the start of its job).
 - [ ] **Milestone 2 — real players**: a tester's Linn (see below), captures
       of the SOAP answers turned into fixtures (anonymized).
 - [ ] **Milestone 3 — more**: Songcast groups (Receiver / Sender), Radio
