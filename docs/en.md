@@ -25,9 +25,10 @@ what DLNA has not got:
   digital inputs…), picked from a list;
 - the **pins** set in the Linn app: a radio, a playlist, an input, recalled in
   one click;
-- **standby** (power on, standby, power state);
-  It also drives the volume (**capped**), the mute, the playback and the title,
-  through the OpenHome Volume, Transport and Info services.
+- **standby** (power on, standby, power state).
+
+It also drives the volume (**capped**), the mute, the playback and the title,
+through the OpenHome Volume, Transport and Info services.
 
 It does not play URLs, browse media servers or play notifications: keep the
 DLNA integration for that. Both can run side by side; the same player can
@@ -108,8 +109,10 @@ says "not sent"; a command that left but whose answer is missing or unusable
 player (a SOAP fault) is quoted as is.
 
 A command cancels the state read in flight and goes before it; Standby and
-mute also go before the other commands waiting: **Standby never waits for a
-slow player**. A source is checked against the list read again from the
+mute also go before the other commands waiting. **Standby also cancels a
+command that has sent nothing yet** (it then says "not sent (Standby went
+first)"): it only waits for a write already sent, within its time limit,
+never for a read or a player slow to answer. A source is checked against the list read again from the
 player before sending; for a pin, the slot is read again and must still hold
 the same pin (else nothing is sent).
 

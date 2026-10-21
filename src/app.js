@@ -202,13 +202,19 @@ export class LinnApp {
   }
 
   /** Device volume steps <-> percent (VolumeMax is 100 on a Linn; other devices may differ). */
+  /** The steps of the device: VolumeMax when 1-99, else 100 (a scale only ever downwards). */
+  volumeScale(record) {
+    const max = record.volumeMax;
+    return Number.isInteger(max) && max >= 1 && max < 100 ? max : 100;
+  }
+
   toPercent(record, raw) {
-    const max = record.volumeMax ?? 100;
+    const max = this.volumeScale(record);
     return Math.min(100, Math.round((raw * 100) / max));
   }
 
   toRaw(record, percent) {
-    const max = record.volumeMax ?? 100;
+    const max = this.volumeScale(record);
     return Math.round((percent * max) / 100);
   }
 
@@ -361,14 +367,19 @@ export class LinnApp {
       pins = [];
     }
     if (client.has(SERVICES.VOLUME) && record.volumeMax === undefined) {
-      // A device without Characteristics is taken as 0-100, like a Linn.
-      record.volumeMax = await soft(
+      // A device without Characteristics is taken as 0-100, like a Linn. The
+      // scale is only ever applied downwards (VolumeMax under 100): until a
+      // real device confirms a larger maximum, a wrong VolumeMax may make a
+      // player quieter, never louder than the cap.
+      const max = await soft(
         this.ask(record, (o) => client.volumeMax(o)),
         undefined,
       );
-      record.volumeMax ??= 100;
+      record.volumeMax = Number.isInteger(max) && max >= 1 && max < 100 ? max : 100;
       if (record.volumeMax !== 100) {
         this.logger.info(`${deviceName(record)}: volume steps 0-${record.volumeMax}, scaled`);
+      } else if (max > 100) {
+        this.logger.warn(`${deviceName(record)}: VolumeMax ${max} ignored, 0-100 kept`);
       }
     }
     record.sources = sources;
@@ -683,17 +694,34 @@ export class LinnApp {
     return this.timings.commandBudget - (this.now() - started);
   }
 
-  /** One request of a command (inside its queue job), within what is left of its budget. */
-  async send(record, started, label, job, { write = true } = {}) {
+  /**
+   * One request of a command (inside its queue job), within what is left of
+   * its budget. A read carries the signal of the job (a Standby may cancel
+   * it); before the first write, the job is marked as writing (from then on
+   * nothing cancels it), unless a Standby already cancelled it.
+   */
+  async send(record, started, label, job, { write = true, signal, control } = {}) {
     const left = this.remaining(started);
+    if (signal?.aborted) {
+      throw new CommandError(`${deviceName(record)}: ${label} not sent (Standby went first)`);
+    }
     if (left < this.timings.minRequest) {
       throw new CommandError(`${deviceName(record)}: ${label} not sent (no time left)`);
     }
+    if (write) {
+      control?.write();
+    }
     try {
-      return await job({ timeout: Math.min(this.timings.requestTimeout, left) });
+      return await job({
+        timeout: Math.min(this.timings.requestTimeout, left),
+        ...(write ? {} : { signal }),
+      });
     } catch (err) {
       if (!(err instanceof OpenhomeError)) {
         throw err;
+      }
+      if (err.code === 'aborted') {
+        throw new CommandError(`${deviceName(record)}: ${label} not sent (Standby went first)`);
       }
       if (err.code === 'fault') {
         throw new CommandError(`${deviceName(record)}: ${err.message}`, { sent: true });
@@ -710,8 +738,9 @@ export class LinnApp {
 
   /**
    * A command from Gladys. Validated before anything is sent; run in the
-   * queue of the device (urgent ones first, Standby cancelling the read in
-   * flight); refused, never sent late, when it could not start within the
+   * queue of the device (urgent ones first; every command cancels the read
+   * in flight, and a Standby also cancels a command that has not written
+   * yet: Standby only ever waits for a write already sent); refused, never sent late, when it could not start within the
    * budget. A command that may have woken the device is followed by the cap
    * check, within what is left of the budget; a quick poll follows.
    */
@@ -730,20 +759,29 @@ export class LinnApp {
       this.cancelWakeCheck(record);
     }
     try {
+      // Before queueing (never the job itself): a read in flight (poll, list, volume check) is cancelled: a command
+      // never waits behind a slow read. A Standby also cancels a command
+      // still reading; a write already sent is never cancelled.
+      record.queue.preempt({ commands: key === FEATURES.STANDBY });
       const job = record.queue.run(
-        () => {
+        (signal, control) => {
           if (this.remaining(started) < this.timings.minRequest) {
             throw new CommandError(`${deviceName(record)}: busy, nothing sent`);
           }
-          return this.command(record, key, command, started);
+          return this.command(record, key, command, started, { signal, control });
         },
         lane,
-        { abortable: false },
+        { abortable: false, untilWrite: true },
       );
-      // A read in flight (poll, list, volume check) is cancelled: a command
-      // never waits behind a slow read, and a write is never cancelled.
-      record.queue.preempt();
-      const result = await job;
+      let result;
+      try {
+        result = await job;
+      } catch (err) {
+        if (err?.code === 'aborted') {
+          throw new CommandError(`${deviceName(record)}: not sent (Standby went first)`);
+        }
+        throw err;
+      }
       if (result?.wake) {
         await this.capAfterWake(record, started);
       }
@@ -792,9 +830,10 @@ export class LinnApp {
   }
 
   /** The requests of a command, inside its queue job. Resolves { wake } when it may have woken the device. */
-  async command(record, key, value, started) {
+  async command(record, key, value, started, { signal, control } = {}) {
     const { client } = record;
-    const send = (label, job, options) => this.send(record, started, label, job, options);
+    const send = (label, job, options) =>
+      this.send(record, started, label, job, { signal, control, ...options });
     const read = (label, job) => send(label, job, { write: false });
     switch (key) {
       case FEATURES.STANDBY:

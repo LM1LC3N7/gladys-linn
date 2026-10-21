@@ -27,11 +27,17 @@ up to date at the end of every milestone.
 - [x] **Milestone 1 fixes — review 1** (2026-10-21): one queue job per
       request, bounded by the deadline of its command (Power on acked in
       time, its cap check in steps); every command cancels the read in
-      flight (Standby never waits for a slow player); Play / Next / Previous
+      flight (Standby also cancels a command still reading, waits only for a
+      write already sent); Play / Next / Previous
       in standby check the cap; HTTP errors after the request = "sent,
       without confirmation", only a 200 is a success; linear entity
       decoding; mute 0 = unmute; pin slot read again; VolumeMax scaling;
       unused records forgotten; "Check" bounded to 25 s.
+- [x] **Milestone 1 fixes — review 2** (2026-10-21): a Standby also
+      cancels a command still in its read phase (its reads carry the job
+      signal, the job is marked writing just before its first write, and a
+      cancelled command never writes afterwards); a `VolumeMax` of 100 or
+      more is ignored (scale only downwards).
 - [ ] **Milestone 2 — real players**: a tester's Linn (see below), captures
       of the SOAP answers turned into fixtures (anonymized).
 - [ ] **Milestone 3 — more**: Songcast groups (Receiver / Sender), Radio
@@ -90,7 +96,8 @@ up to date at the end of every milestone.
   lowers to the cap first; Power on, or a source / pin / Play / Next /
   Previous in standby, checks the volume after the wake-up (within the
   command budget, then every 2.5 s, 6 times; a Standby stops it). The cap is
-  in percent, scaled to `VolumeMax`.
+  in percent, scaled to `VolumeMax` only when it is under 100 (a wrong
+  value may make a player quieter, never louder; to confirm on a real one).
 - **Commands**: a 3.5 s budget, a request not started under 300 ms left;
   "not sent" / "sent, without confirmation" (any HTTP answer, even an
   error, means the request arrived) / the SOAP fault quoted. One queue job

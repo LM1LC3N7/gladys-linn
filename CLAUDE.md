@@ -67,7 +67,8 @@ test/fixtures/             the Linn description of openhomedevice (MIT)
 - **Commands**: 3.5 s budget, never sent late, the result said exactly (any
   HTTP answer means the request arrived). One queue job per request, its
   timeout bounded by the deadline it belongs to; every command cancels the
-  read in flight, so Standby never waits for a slow player.
+  read in flight, and Standby also cancels a command that has not written yet
+  (it only waits for a write already sent, never cancelled).
 - **Hostile answers**: bounded sizes (`LIMITS`), the XML parser refuses a
   `DOCTYPE`, nothing read from a device becomes an object key, control URLs
   stay on the host of the description, SSDP locations on the address that

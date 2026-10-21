@@ -21,15 +21,26 @@ export class DeviceQueue {
   }
 
   /**
-   * Run `task(signal)` when its turn comes; `lane` is 'urgent', 'command' or
-   * 'poll'. A read is abortable by default in the poll lane.
+   * Run `task(signal, control)` when its turn comes; `lane` is 'urgent',
+   * 'command' or 'poll'. A read is abortable by default in the poll lane. A
+   * command job (`untilWrite`) reads first, then writes: it calls
+   * `control.write()` just before its first write, and until then a Standby
+   * (`preempt({ commands: true })`) may cancel it.
    */
-  run(task, lane = 'poll', { abortable = lane === 'poll' } = {}) {
+  run(task, lane = 'poll', { abortable = lane === 'poll', untilWrite = false } = {}) {
     if (this.closed) {
       return Promise.reject(new Error('stopped'));
     }
     return new Promise((resolve, reject) => {
-      const item = { task, resolve, reject, rank: RANK[lane] ?? RANK.poll, abortable };
+      const item = {
+        task,
+        resolve,
+        reject,
+        rank: RANK[lane] ?? RANK.poll,
+        abortable,
+        untilWrite,
+        writing: false,
+      };
       const index = this.items.findIndex((other) => other.rank > item.rank);
       this.items.splice(index === -1 ? this.items.length : index, 0, item);
       this.drain();
@@ -41,10 +52,15 @@ export class DeviceQueue {
     return this.items.some((item) => item.rank < RANK.poll);
   }
 
-  /** Cancel the job in flight when it is an abortable read. */
-  preempt() {
-    if (this.running?.abortable) {
-      this.running.controller.abort();
+  /**
+   * Cancel the job in flight when it is an abortable read, or (`commands`,
+   * for a Standby) a command job that has not written anything yet. A write
+   * already sent is never cancelled.
+   */
+  preempt({ commands = false } = {}) {
+    const item = this.running;
+    if (item?.abortable || (commands && item?.untilWrite && !item.writing)) {
+      item.controller.abort();
     }
   }
 
@@ -68,7 +84,16 @@ export class DeviceQueue {
       aborted.catch(() => {}); // an abort after the end is nobody's error
       try {
         item.resolve(
-          await Promise.race([Promise.resolve().then(() => item.task(signal)), aborted]),
+          await Promise.race([
+            Promise.resolve().then(() =>
+              item.task(signal, {
+                write: () => {
+                  item.writing = true;
+                },
+              }),
+            ),
+            aborted,
+          ]),
         );
       } catch (err) {
         item.reject(err);

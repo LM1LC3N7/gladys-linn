@@ -25,9 +25,10 @@ apporte ce que le DLNA n'a pas :
   analogiques, numériques…), à choisir dans une liste ;
 - les **épingles** (« pins ») réglées dans l'application Linn : une radio, une
   liste de lecture, une entrée, rappelées d'un clic ;
-- la **veille** (allumer, mettre en veille, état de marche) ;
-  Elle pilote aussi le volume (**plafonné**), la sourdine, la lecture et le titre,
-  par les services Volume, Transport et Info d'OpenHome.
+- la **veille** (allumer, mettre en veille, état de marche).
+
+Elle pilote aussi le volume (**plafonné**), la sourdine, la lecture et le titre,
+par les services Volume, Transport et Info d'OpenHome.
 
 Elle ne lit pas d'URL, ne parcourt pas de serveur multimédia et ne joue pas les
 notifications : pour cela, gardez l'intégration DLNA. Les deux peuvent tourner
@@ -112,8 +113,10 @@ HTTP) est signalée « sent, without confirmation » (envoyée, sans
 confirmation) ; un refus du lecteur (erreur SOAP) est cité tel quel.
 
 Une commande annule la lecture d'état en cours et passe avant elle ; Veille et
-sourdine passent aussi avant les autres commandes en attente : **Veille n'attend
-jamais un lecteur lent**. La source choisie est vérifiée sur la liste relue du
+sourdine passent aussi avant les autres commandes en attente. **Veille annule
+aussi une commande qui n'a encore rien envoyé** (elle répond alors « not sent
+(Standby went first) ») : elle n'attend qu'une écriture déjà partie, dans la
+limite de son délai, jamais une lecture ni un lecteur lent à répondre. La source choisie est vérifiée sur la liste relue du
 lecteur avant l'envoi ; pour une épingle, l'emplacement est relu et doit
 toujours contenir la même épingle (sinon rien n'est envoyé).
 

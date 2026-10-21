@@ -495,3 +495,52 @@ test('"Check the players" stops at its time limit', async (t) => {
   const check = JSON.stringify(await gladys.fake.action('check_devices'));
   assert.match(check, /not read|pas de réponse/);
 });
+
+// --- Review 2 -----------------------------------------------------------------
+
+test('Standby 0.2 s after a Source on a slow player: the Source, still reading, gives way', async (t) => {
+  const { gladys, device: fake } = await setup(t, { timings: { requestTimeout: 3_000 } });
+  const device = await createDevice(gladys);
+  fake.delays['Product#Standby'] = 2_800;
+  fake.delays['Product#SourceXml'] = 2_800;
+  const source = timed(set(gladys, device, 'source', 'source:3'));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const standby = await timed(set(gladys, device, 'standby'));
+  assert.equal(standby.success, true, JSON.stringify(standby));
+  assert.ok(standby.ms < 1_000, `Standby acked after ${standby.ms} ms`);
+  assert.equal(fake.state.standby, true);
+  const chosen = await source;
+  assert.equal(chosen.success, false);
+  assert.match(JSON.stringify(chosen), /not sent \(Standby went first\)/);
+  // The cancelled command never writes afterwards (it would wake the player).
+  await new Promise((resolve) => setTimeout(resolve, 3_200));
+  assert.ok(!fake.calls.includes('Product#SetSourceIndex'));
+  assert.equal(fake.state.standby, true);
+});
+
+test('a write already sent is not cancelled by Standby, which goes right after', async (t) => {
+  const { gladys, device: fake } = await setup(t, { timings: { requestTimeout: 3_000 } });
+  const device = await createDevice(gladys);
+  fake.delays['Volume#SetVolume'] = 800;
+  const volume = set(gladys, device, 'volume', 20);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const standby = await set(gladys, device, 'standby');
+  assert.equal((await volume).success, true);
+  assert.equal(standby.success, true);
+  assert.equal(fake.state.volume, 20);
+  assert.equal(fake.state.standby, true);
+});
+
+test('a VolumeMax over 100 is ignored: the cap never gets louder', async (t) => {
+  const { gladys, device: fake } = await setup(t, {
+    config: { max_volume: 50 },
+    deviceOptions: { volumeMax: 1_000 },
+  });
+  const device = await createDevice(gladys);
+  fake.state.mute = true;
+  fake.state.volume = 90;
+  await set(gladys, device, 'mute', 0);
+  assert.equal(fake.state.volume, 50, 'lowered to the cap of a 0-100 player');
+  await set(gladys, device, 'volume', 50);
+  assert.equal(fake.state.volume, 50, 'never 500');
+});
