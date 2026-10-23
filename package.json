@@ -1,6 +1,6 @@
 {
   "name": "gladys-linn",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Gladys Assistant external integration for Linn network players and other OpenHome devices (standby, volume, sources, pins, playback), over UPnP on the local network. Unofficial, not affiliated with Linn Products.",
   "type": "module",
