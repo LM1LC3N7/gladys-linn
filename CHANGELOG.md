@@ -10,6 +10,12 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+### Fixed
+
+- A source or a pin that the device gives without a name is labelled "Source 3" or
+  "Pin 2", and a repeated one is left out, so one odd option can no longer make
+  Gladys refuse the whole publication and leave Discovery empty.
+
 ## [0.1.2] - 2026-10-23
 
 ## [0.1.1] - 2026-10-21

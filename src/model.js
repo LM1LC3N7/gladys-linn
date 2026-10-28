@@ -91,16 +91,29 @@ export const FEATURE_SPECS = Object.freeze({
   },
 });
 
-/** The options of the "Source" dropdown: the visible sources, then the pins. */
+/**
+ * The options of the "Source" dropdown: the visible sources, then the pins. The names
+ * come from the device, and the Gladys core refuses the WHOLE publication for one
+ * option with a blank label or a value seen twice: a blank name is replaced by a label
+ * made of the value ("Source 3", "Pin 2"), and a repeated value is left out.
+ */
 export function sourceOptions(device) {
   const sources = (device.sources ?? [])
     .filter((s) => s.visible)
     .slice(0, LIMITS.sources)
-    .map((s) => ({ value: `source:${s.index}`, label: s.name }));
-  const pins = (device.pins ?? [])
-    .slice(0, LIMITS.pins)
-    .map((p) => ({ value: `pin:${p.index}`, label: `${p.index}. ${p.title}` }));
-  return [...sources, ...pins];
+    .map((s) => ({
+      value: `source:${s.index}`,
+      label: String(s.name ?? '').trim() || `Source ${s.index}`,
+    }));
+  const pins = (device.pins ?? []).slice(0, LIMITS.pins).map((p) => {
+    const title = String(p.title ?? '').trim();
+    return {
+      value: `pin:${p.index}`,
+      label: title ? `${p.index}. ${title}` : `Pin ${p.index}`,
+    };
+  });
+  const seen = new Set();
+  return [...sources, ...pins].filter((o) => !seen.has(o.value) && seen.add(o.value));
 }
 
 /** "source:3" -> { kind: 'source', index: 3 }, "pin:2" -> { kind: 'pin', index: 2 }, else undefined. */
